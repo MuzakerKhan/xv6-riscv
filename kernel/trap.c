@@ -168,8 +168,19 @@ clockintr()
     acquire(&tickslock);
     ticks++;
     wakeup(&ticks);
+
+    // Set periodic deadlock-check flag every DL_CHECK_TICKS ticks.
+    extern volatile int dl_check_pending;
+    if(ticks % 100 == 0)
+      dl_check_pending = 1;
+
     release(&tickslock);
   }
+
+  // Increment cpu_ticks for the currently running process.
+  struct proc *p = myproc();
+  if(p && p->state == RUNNING)
+    p->cpu_ticks++;
 
   // ask for the next timer interrupt. this also clears
   // the interrupt request. 1000000 is about a tenth

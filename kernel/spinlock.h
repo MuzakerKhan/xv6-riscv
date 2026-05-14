@@ -5,5 +5,7 @@ struct spinlock {
   // For debugging:
   char *name;        // Name of lock.
   struct cpu *cpu;   // The cpu holding the lock.
+
+  int resource_id;   // deadlock subsystem ID (-1 = exempt / not tracked)
 };
 

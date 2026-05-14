@@ -19,4 +19,10 @@
 #define SYS_unlink 18
 #define SYS_link   19
 #define SYS_mkdir  20
-#define SYS_close  21
+#define SYS_close         21
+#define SYS_dlstate       22
+#define SYS_dlacquire     23
+#define SYS_dlrelease     24
+#define SYS_dlsetmode     25
+#define SYS_dlsetresolution 26
+#define SYS_setpriority   27

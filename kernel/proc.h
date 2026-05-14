@@ -104,4 +104,12 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  // Deadlock subsystem tracking.
+  int      holds[16];     // resource IDs currently held (tokens + kernel locks)
+  int      holds_count;   // number of entries in holds[]
+  int      waiting_for;   // resource ID this process is blocked on (-1 = none)
+  int      dl_preempted;  // 1 if resolver stripped our resources (preempt mode)
+  int      priority;      // deadlock scoring priority 0(low)..9(high); default 5
+  uint64   cpu_ticks;     // accumulated timer ticks while running (for progress score)
 };

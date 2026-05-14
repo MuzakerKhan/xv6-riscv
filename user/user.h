@@ -24,6 +24,12 @@ int getpid(void);
 char* sys_sbrk(int,int);
 int pause(int);
 int uptime(void);
+int dlstate(void);
+int dlacquire(int);
+int dlrelease(int);
+int dlsetmode(int);
+int dlsetresolution(int);
+int setpriority(int);
 
 // ulib.c
 int stat(const char*, struct stat*);

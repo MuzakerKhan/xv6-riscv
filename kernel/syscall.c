@@ -101,6 +101,12 @@ extern uint64 sys_unlink(void);
 extern uint64 sys_link(void);
 extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
+extern uint64 sys_dlstate(void);
+extern uint64 sys_dlacquire(void);
+extern uint64 sys_dlrelease(void);
+extern uint64 sys_dlsetmode(void);
+extern uint64 sys_dlsetresolution(void);
+extern uint64 sys_setpriority(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -125,7 +131,13 @@ static uint64 (*syscalls[])(void) = {
 [SYS_unlink]  sys_unlink,
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
-[SYS_close]   sys_close,
+[SYS_close]    sys_close,
+[SYS_dlstate]       sys_dlstate,
+[SYS_dlacquire]     sys_dlacquire,
+[SYS_dlrelease]     sys_dlrelease,
+[SYS_dlsetmode]     sys_dlsetmode,
+[SYS_dlsetresolution] sys_dlsetresolution,
+[SYS_setpriority]   sys_setpriority,
 };
 
 void

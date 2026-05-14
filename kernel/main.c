@@ -3,6 +3,7 @@
 #include "memlayout.h"
 #include "riscv.h"
 #include "defs.h"
+#include "deadlock.h"
 
 volatile static int started = 0;
 
@@ -13,6 +14,7 @@ main()
   if(cpuid() == 0){
     consoleinit();
     printfinit();
+    deadlock_init(); // deadlock subsystem — early so kernel locks get registered
     printf("\n");
     printf("xv6 kernel is booting\n");
     printf("\n");

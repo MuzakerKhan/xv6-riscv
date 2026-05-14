@@ -146,6 +146,15 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+  // Initialize deadlock tracking fields.
+  p->holds_count  = 0;
+  p->waiting_for  = -1;
+  p->dl_preempted = 0;
+  p->priority     = 5;      // medium priority by default
+  p->cpu_ticks    = 0;
+  for(int i = 0; i < 16; i++)
+    p->holds[i] = -1;
+
   return p;
 }
 
@@ -162,6 +171,14 @@ freeproc(struct proc *p)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
   p->sz = 0;
+  // Release any deadlock resources this process held.
+  extern void dl_proc_cleanup(int);
+  if(p->pid > 0)
+    dl_proc_cleanup(p->pid);
+  p->holds_count  = 0;
+  p->waiting_for  = -1;
+  p->dl_preempted = 0;
+  p->cpu_ticks    = 0;
   p->pid = 0;
   p->parent = 0;
   p->name[0] = 0;
