@@ -48,10 +48,14 @@ acquire(struct spinlock *lk)
   // Record info about lock acquisition for holding() and debugging.
   lk->cpu = mycpu();
 
-  // Notify deadlock subsystem (only for user processes; skip kernel-init context).
+  // Notify deadlock subsystem.
+  // Guard: skip if this CPU is already inside the dl subsystem (dl_cpu_busy)
+  // to prevent dl_lock double-acquire panics.
   if(lk->resource_id >= 0 && myproc() != 0 && myproc()->pid > 0){
     extern void dl_on_acquire(int, int, int);
-    dl_on_acquire(lk->resource_id, myproc()->pid, 1 /* DL_TYPE_SPINLOCK */);
+    extern int  dl_cpu_busy[];
+    if(!dl_cpu_busy[r_tp()])
+      dl_on_acquire(lk->resource_id, myproc()->pid, 1 /* DL_TYPE_SPINLOCK */);
   }
 }
 
@@ -64,8 +68,10 @@ release(struct spinlock *lk)
 
   // Notify deadlock subsystem before the lock is physically released.
   if(lk->resource_id >= 0 && myproc() != 0 && myproc()->pid > 0){
-    extern void dl_on_release(int, int);
-    dl_on_release(lk->resource_id, myproc()->pid);
+    extern void dl_on_release(int, int, int);
+    extern int  dl_cpu_busy[];
+    if(!dl_cpu_busy[r_tp()])
+      dl_on_release(lk->resource_id, myproc()->pid, 1 /* DL_TYPE_SPINLOCK */);
   }
 
   lk->cpu = 0;

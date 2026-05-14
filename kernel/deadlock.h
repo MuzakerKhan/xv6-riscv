@@ -60,9 +60,14 @@ int  dl_banker_safe_locked(int pid, int rid);
 
 // Called from kernel lock hooks (no dl_lock needed — uses hook guard).
 void dl_on_acquire(int rid, int pid, int type);
-void dl_on_release(int rid, int pid);
+void dl_on_release(int rid, int pid, int type);
 void dl_on_wait(int rid, int pid);   // called when process is about to sleep
 void dl_on_unwait(int pid);          // called when process wakes up
+
+// dl_lock wrappers — always use these instead of bare acquire/release.
+// They set/clear dl_cpu_busy[cpu] so spinlock hooks know not to re-enter.
+int  dl_lock_acquire(void);   // returns 1 if acquired, 0 if already held
+void dl_lock_release(void);
 
 // Called from sysdeadlock / user-facing code.
 void dl_print_state(void);

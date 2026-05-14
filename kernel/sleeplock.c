@@ -49,9 +49,9 @@ acquiresleep(struct sleeplock *lk)
 void
 releasesleep(struct sleeplock *lk)
 {
-  extern void dl_on_release(int, int);
+  extern void dl_on_release(int, int, int);
   if(lk->dl_rid >= 0 && myproc() && myproc()->pid > 0)
-    dl_on_release(lk->dl_rid, myproc()->pid);
+    dl_on_release(lk->dl_rid, myproc()->pid, 2 /* DL_TYPE_SLEEPLOCK */);
 
   acquire(&lk->lk);
   lk->locked = 0;
