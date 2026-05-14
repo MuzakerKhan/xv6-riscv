@@ -11,16 +11,10 @@
 void
 initlock(struct spinlock *lk, char *name)
 {
-  lk->name      = name;
-  lk->locked    = 0;
-  lk->cpu       = 0;
-  lk->resource_id = -1;   // exempt until deadlock_init runs
-
-  // Register with the deadlock subsystem if it is already up.
-  extern int dl_ready;
-  extern int dl_register(char*, int);
-  if(dl_ready)
-    lk->resource_id = dl_register(name, 1 /* DL_TYPE_SPINLOCK */);
+  lk->name        = name;
+  lk->locked      = 0;
+  lk->cpu         = 0;
+  lk->resource_id = -1;   // not tracked — spinlocks don't cause inter-process deadlock
 }
 
 // Acquire the lock.
@@ -47,16 +41,6 @@ acquire(struct spinlock *lk)
 
   // Record info about lock acquisition for holding() and debugging.
   lk->cpu = mycpu();
-
-  // Notify deadlock subsystem.
-  // Guard: skip if this CPU is already inside the dl subsystem (dl_cpu_busy)
-  // to prevent dl_lock double-acquire panics.
-  if(lk->resource_id >= 0 && myproc() != 0 && myproc()->pid > 0){
-    extern void dl_on_acquire(int, int, int);
-    extern int  dl_cpu_busy[];
-    if(!dl_cpu_busy[r_tp()])
-      dl_on_acquire(lk->resource_id, myproc()->pid, 1 /* DL_TYPE_SPINLOCK */);
-  }
 }
 
 // Release the lock.
@@ -65,14 +49,6 @@ release(struct spinlock *lk)
 {
   if(!holding(lk))
     panic("release");
-
-  // Notify deadlock subsystem before the lock is physically released.
-  if(lk->resource_id >= 0 && myproc() != 0 && myproc()->pid > 0){
-    extern void dl_on_release(int, int, int);
-    extern int  dl_cpu_busy[];
-    if(!dl_cpu_busy[r_tp()])
-      dl_on_release(lk->resource_id, myproc()->pid, 1 /* DL_TYPE_SPINLOCK */);
-  }
 
   lk->cpu = 0;
 
