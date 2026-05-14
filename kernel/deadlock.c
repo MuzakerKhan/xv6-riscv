@@ -19,7 +19,7 @@ int                dl_ready      = 0;
 // acquiring it).  Checked by spinlock hooks to prevent dl_lock double-acquire
 // panics (e.g. printf inside dl_print_state acquires console lock → hook fires
 // → would try to acquire dl_lock again → panic).
-static int dl_cpu_busy[NCPU];
+int dl_cpu_busy[NCPU];
 
 extern struct proc proc[];
 
