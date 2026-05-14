@@ -303,7 +303,7 @@ dl_resolve_locked(void)
   if(mode == DL_RES_KILL)
     kkill(best_pid);
 
-  printf("DEADLOCK RESOLVED [%s]: victim pid=%d score=%d\n",
+  printf("DEADLOCK RESOLVED: action=%s victim=pid%d score=%d\n",
          mode == DL_RES_KILL ? "KILL" : "PREEMPT", best_pid, best_score);
 }
 
@@ -342,30 +342,30 @@ dl_print_state(void)
   dl_maybe_check();
   if(!dl_lock_acquire()) return;
 
-  printf("\n========== DEADLOCK SUBSYSTEM ==========\n");
-  printf("Mode: %s   Resolution: %s\n",
-         dl_mode == DL_MODE_AGGRESSIVE ? "AGGRESSIVE" : "NORMAL",
-         dl_resolution == DL_RES_KILL  ? "KILL"       : "PREEMPT");
+  printf("\n[DEADLOCK SUBSYSTEM]\n");
+  printf("Mode: %s\n", dl_mode == DL_MODE_AGGRESSIVE ? "AGGRESSIVE" : "NORMAL");
+  printf("Resolution: %s\n", dl_resolution == DL_RES_KILL ? "KILL" : "PREEMPT");
 
-  printf("\nResources held (%d registered):\n", dl_nresources);
+  printf("\nResources currently held:\n");
+  int any_held = 0;
   for(int i = 0; i < dl_nresources; i++){
     if(dl_resources[i].holder_pid < 0) continue;
-    char *tname = "?";
-    switch(dl_resources[i].type){
-      case DL_TYPE_TOKEN:     tname = "TOKEN";    break;
-      case DL_TYPE_SPINLOCK:  tname = "SPINLK";   break;
-      case DL_TYPE_SLEEPLOCK: tname = "SLEEPLK";  break;
-      case DL_TYPE_PIPE:      tname = "PIPE";      break;
-    }
-    printf("  [%d] %s %s  pid=%d\n",
+    any_held = 1;
+    char *tname = "token";
+    if(dl_resources[i].type == DL_TYPE_SLEEPLOCK) tname = "sleeplock";
+    if(dl_resources[i].type == DL_TYPE_PIPE)      tname = "pipe";
+    printf("  resource %d (%s %s) held by pid %d\n",
            i, tname, dl_resources[i].name,
            dl_resources[i].holder_pid);
   }
+  if(!any_held)
+    printf("  (none)\n");
 
-  printf("\nProcesses:\n");
+  printf("\nProcess table:\n");
   for(int i = 0; i < NPROC; i++){
     if(proc[i].state == UNUSED || proc[i].pid <= 0) continue;
-    printf("  pid=%d %s  prio=%d  cpu=%lu  holds=%d  wait=%d  score=%d\n",
+    printf("  pid %d  name=%-8s  priority=%d  cpu_ticks=%lu"
+           "  holds=%d  waiting_for=%d  kill_score=%d\n",
            proc[i].pid, proc[i].name,
            proc[i].priority,
            (unsigned long)proc[i].cpu_ticks,
@@ -374,30 +374,29 @@ dl_print_state(void)
            kill_score(&proc[i]));
   }
 
-  // Banker's for waiting processes.
   int any_wait = 0;
   for(int i = 0; i < NPROC; i++)
     if(proc[i].state != UNUSED && proc[i].pid > 0 && proc[i].waiting_for >= 0)
       { any_wait = 1; break; }
 
   if(any_wait){
-    printf("\nBanker's analysis:\n");
+    printf("\nBanker's algorithm check:\n");
     for(int i = 0; i < NPROC; i++){
       if(proc[i].state == UNUSED || proc[i].pid <= 0) continue;
       int rid = proc[i].waiting_for;
       if(rid < 0) continue;
-      printf("  pid=%d requesting rid=%d -> %s\n",
-             proc[i].pid, rid,
-             dl_banker_safe_locked(proc[i].pid, rid) ? "SAFE" : "UNSAFE");
+      int safe = dl_banker_safe_locked(proc[i].pid, rid);
+      printf("  pid %d requesting resource %d -> state would be %s\n",
+             proc[i].pid, rid, safe ? "SAFE" : "UNSAFE");
     }
   }
 
   if(dl_detect_locked()){
-    printf("\n*** DEADLOCK DETECTED ***\n");
+    printf("\nDEADLOCK DETECTED\n");
     dl_resolve_locked();
   } else {
-    printf("\nStatus: no deadlock\n");
-    printf("==========================================\n\n");
+    printf("\nResult: no deadlock detected\n");
+    printf("[end of report]\n\n");
     dl_lock_release();
   }
 }
