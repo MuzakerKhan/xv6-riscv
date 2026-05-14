@@ -149,6 +149,9 @@ UPROGS=\
 	$U/_dorphan\
 	$U/_dlmon\
 	$U/_dltest\
+	$U/_dltest2\
+	$U/_dltest3\
+	$U/_dltest4\
 	$U/_dlmode\
 
 fs.img: mkfs/mkfs README $(UPROGS)
