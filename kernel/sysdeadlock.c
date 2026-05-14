@@ -45,18 +45,19 @@ sys_dlacquire(void)
       if(p->dl_preempted){ p->dl_preempted = 0; return -3; }
       if(killed(p)) return -2;
       if(!dl_lock_acquire()) return -1;
-      continue;
+      continue;  // dl_cpu_busy[cpu]=1 set by dl_lock_acquire
     }
 
     if(!dl_banker_safe_locked(p->pid, rid))
       printf("BANKER WARNING: token %d to pid=%d is UNSAFE\n", rid, p->pid);
 
-    // sleep() releases dl_lock atomically and reacquires it when woken.
-    // It bypasses our wrapper, so dl_cpu_busy may be wrong after wake.
-    // Reset it manually: dl_cpu_busy[cpu]=1 so hooks stay suppressed while
-    // we still logically hold dl_lock.
+    // sleep() releases dl_lock and suspends this process.
+    // Clear dl_cpu_busy BEFORE sleeping — other processes will run on this
+    // CPU and must not inherit our "busy" state.
+    // After sleep() returns, dl_lock is reacquired; restore the flag.
+    dl_cpu_busy[r_tp()] = 0;
     sleep(&dl_resources[rid], &dl_lock);
-    dl_cpu_busy[r_tp()] = 1;   // restore after sleep reacquired dl_lock
+    dl_cpu_busy[r_tp()] = 1;
 
     if(p->dl_preempted){ p->waiting_for=-1; p->dl_preempted=0;
                          dl_lock_release(); return -3; }
