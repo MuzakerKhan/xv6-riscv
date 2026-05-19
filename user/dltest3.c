@@ -2,68 +2,99 @@
 #include "kernel/stat.h"
 #include "user/user.h"
 
-// dltest3 -- demonstrates the priority-based scoring system.
+// dltest3: shows that the scoring system picks the right victim
 //
-// Two processes create a deadlock. One is given HIGH priority (9),
-// the other LOW priority (0). The system must always kill the low-priority
-// process regardless of which process detected the deadlock first.
+// we create a deadlock between two processes
+// one process gets priority 9 (very important, should survive)
+// the other process gets priority 0 (not important, should be killed)
 //
-// Run this after: dlmode kill
-// Expected output: the low-priority process is always the victim.
+// run this test with: dltest3
+// the low priority process should always be killed, not the high priority one
 
-int
-main(void)
+int main(void)
 {
-  printf("=== dltest3: priority-based victim selection ===\n");
-  printf("High-priority process (prio=9) should always survive.\n");
-  printf("Low-priority process  (prio=0) should always be killed.\n\n");
+    int child_pid;
+    int ret;
 
-  int pid = fork();
-  if(pid < 0){ printf("fork failed\n"); exit(1); }
+    printf("=== dltest3: priority based victim selection ===\n");
+    printf("high priority process (prio=9) should always survive\n");
+    printf("low priority process (prio=0) should always be killed\n\n");
 
-  if(pid == 0){
-    // CHILD: set LOW priority -- should be the victim
-    setpriority(0);
-    printf("LOW  (pid=%d prio=0): acquiring token 3...\n", getpid());
-    if(dlacquire(3) < 0){ printf("LOW: failed to get token 3\n"); exit(1); }
-    printf("LOW  (pid=%d): got token 3. Yielding...\n", getpid());
-    pause(5);
-
-    printf("LOW  (pid=%d): requesting token 4 -- deadlock forms here\n", getpid());
-    int r = dlacquire(4);
-    if(r < 0){
-      printf("LOW  (pid=%d): killed as expected (code %d). System working correctly.\n",
-             getpid(), r);
-      dlrelease(3);
-      exit(1);
+    child_pid = fork();
+    if(child_pid < 0)
+    {
+        printf("fork failed\n");
+        exit(1);
     }
-    printf("LOW  (pid=%d): WARNING -- survived when it should have been killed!\n",
-           getpid());
-    dlrelease(4); dlrelease(3);
+
+    if(child_pid == 0)
+    {
+        // child process gets LOW priority
+        setpriority(0);
+
+        printf("LOW PRIORITY process (pid=%d prio=0): getting token 3...\n", getpid());
+        ret = dlacquire(3);
+        if(ret < 0)
+        {
+            printf("LOW: could not get token 3\n");
+            exit(1);
+        }
+
+        printf("LOW PRIORITY process (pid=%d): got token 3, waiting...\n", getpid());
+        pause(5);
+
+        printf("LOW PRIORITY process (pid=%d): trying token 4 (deadlock here)\n", getpid());
+        ret = dlacquire(4);
+
+        if(ret < 0)
+        {
+            // this is what we expect
+            printf("LOW PRIORITY process (pid=%d): killed as expected, system works correctly\n", getpid());
+            dlrelease(3);
+            exit(1);
+        }
+
+        // if we reach here something went wrong
+        printf("LOW PRIORITY process: WARNING should have been killed but wasnt\n");
+        dlrelease(4);
+        dlrelease(3);
+        exit(0);
+    }
+    else
+    {
+        // parent process gets HIGH priority
+        setpriority(9);
+
+        printf("HIGH PRIORITY process (pid=%d prio=9): getting token 4...\n", getpid());
+        ret = dlacquire(4);
+        if(ret < 0)
+        {
+            printf("HIGH: could not get token 4\n");
+            wait(0);
+            exit(1);
+        }
+
+        printf("HIGH PRIORITY process (pid=%d): got token 4, waiting...\n", getpid());
+        pause(5);
+
+        printf("HIGH PRIORITY process (pid=%d): trying token 3 (deadlock here)\n", getpid());
+        ret = dlacquire(3);
+
+        if(ret < 0)
+        {
+            // this should NOT happen since high priority should be protected
+            printf("HIGH PRIORITY process (pid=%d): was killed, scoring has a bug!\n", getpid());
+            dlrelease(4);
+            wait(0);
+            exit(1);
+        }
+
+        printf("HIGH PRIORITY process (pid=%d): survived as expected, priority scoring is correct\n", getpid());
+        dlrelease(3);
+        dlrelease(4);
+        wait(0);
+        printf("=== dltest3 done ===\n");
+    }
+
     exit(0);
-
-  } else {
-    // PARENT: set HIGH priority -- should always survive
-    setpriority(9);
-    printf("HIGH (pid=%d prio=9): acquiring token 4...\n", getpid());
-    if(dlacquire(4) < 0){ printf("HIGH: failed to get token 4\n"); wait(0); exit(1); }
-    printf("HIGH (pid=%d): got token 4. Yielding...\n", getpid());
-    pause(5);
-
-    printf("HIGH (pid=%d): requesting token 3 -- deadlock forms here\n", getpid());
-    int r = dlacquire(3);
-    if(r < 0){
-      printf("HIGH (pid=%d): killed -- scoring system has a bug! (code %d)\n",
-             getpid(), r);
-      dlrelease(4);
-      wait(0); exit(1);
-    }
-    printf("HIGH (pid=%d): survived as expected. Priority scoring is correct.\n",
-           getpid());
-    dlrelease(3); dlrelease(4);
-    wait(0);
-    printf("=== dltest3 done ===\n");
-  }
-
-  exit(0);
 }

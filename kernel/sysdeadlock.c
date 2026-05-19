@@ -8,7 +8,7 @@
 
 extern int dl_cpu_busy[];
 
-// ── dlstate() ────────────────────────────────────────────────────────────────
+// system call: print the current deadlock system state
 uint64
 sys_dlstate(void)
 {
@@ -16,127 +16,178 @@ sys_dlstate(void)
   return 0;
 }
 
-// ── dlacquire(int rid) ───────────────────────────────────────────────────────
-// Acquire one of the DL_TOKEN_MAX explicit user tokens (rid 0..7).
-// Returns:
-//   0  = success
-//  -1  = bad rid
-//  -2  = killed as deadlock victim
-//  -3  = preempted (resources stripped; retry later)
+// system call: acquire a user token (resource 0 to 7)
+// blocks until the token is available
+// return values:
+//   0  = got it
+//  -1  = bad token number
+//  -2  = this process was killed as the deadlock victim
+//  -3  = resources were preempted (stripped), process can retry
 uint64
 sys_dlacquire(void)
 {
-  int rid;
-  argint(0, &rid);
-  if(rid < 0 || rid >= DL_TOKEN_MAX) return -1;
+  int token_id;
+  struct proc *p;
 
-  struct proc *p = myproc();
+  argint(0, &token_id);
+  if(token_id < 0 || token_id >= DL_TOKEN_MAX)
+    return -1;
 
-  // Use the exported wrapper so dl_cpu_busy is set correctly.
-  if(!dl_lock_acquire()) return -1;
+  p = myproc();
 
-  while(dl_resources[rid].holder_pid != -1){
-    p->waiting_for = rid;
+  if(!dl_lock_acquire())
+    return -1;
 
+  // keep trying until we get the token
+  while(dl_resources[token_id].holder_pid != -1){
+
+    // mark that we are waiting for this token
+    p->waiting_for = token_id;
+
+    // check if we are now part of a deadlock cycle
     if(dl_detect_locked()){
-      printf("DEADLOCK DETECTED: pid=%d waiting for token %d\n", p->pid, rid);
-      dl_resolve_locked();   // releases dl_lock internally
+      printf("DEADLOCK DETECTED: pid=%d waiting for token %d\n",
+        p->pid, token_id);
+      dl_resolve_locked();
       p->waiting_for = -1;
-      if(p->dl_preempted){ p->dl_preempted = 0; return -3; }
-      if(killed(p)) return -2;
-      if(!dl_lock_acquire()) return -1;
-      continue;  // dl_cpu_busy[cpu]=1 set by dl_lock_acquire
+
+      if(p->dl_preempted){
+        p->dl_preempted = 0;
+        return -3;
+      }
+      if(killed(p))
+        return -2;
+
+      // try to get the lock again and retry the loop
+      if(!dl_lock_acquire())
+        return -1;
+      continue;
     }
 
-    if(!dl_banker_safe_locked(p->pid, rid))
-      printf("BANKER WARNING: token %d to pid=%d is UNSAFE\n", rid, p->pid);
+    // run banker's check and warn if granting this would be unsafe
+    if(!dl_banker_safe_locked(p->pid, token_id))
+      printf("BANKER WARNING: giving token %d to pid=%d is UNSAFE\n",
+        token_id, p->pid);
 
-    // sleep() releases dl_lock and suspends this process.
-    // Clear dl_cpu_busy BEFORE sleeping — other processes will run on this
-    // CPU and must not inherit our "busy" state.
-    // After sleep() returns, dl_lock is reacquired; restore the flag.
+    // go to sleep until someone releases this token
+    // we clear the cpu busy flag first so other processes on this cpu
+    // can still use the deadlock system while we are sleeping
     dl_cpu_busy[r_tp()] = 0;
-    sleep(&dl_resources[rid], &dl_lock);
+    sleep(&dl_resources[token_id], &dl_lock);
     dl_cpu_busy[r_tp()] = 1;
 
-    if(p->dl_preempted){ p->waiting_for=-1; p->dl_preempted=0;
-                         dl_lock_release(); return -3; }
-    if(killed(p)){ p->waiting_for=-1; dl_lock_release(); return -2; }
+    // check what happened when we woke up
+    if(p->dl_preempted){
+      p->waiting_for   = -1;
+      p->dl_preempted  = 0;
+      dl_lock_release();
+      return -3;
+    }
+    if(killed(p)){
+      p->waiting_for = -1;
+      dl_lock_release();
+      return -2;
+    }
   }
 
-  dl_resources[rid].holder_pid = p->pid;
+  // token is free now, take it
+  dl_resources[token_id].holder_pid = p->pid;
   if(p->holds_count < MAX_HOLDS)
-    p->holds[p->holds_count++] = rid;
+    p->holds[p->holds_count++] = token_id;
   p->waiting_for = -1;
 
   dl_lock_release();
   return 0;
 }
 
-// ── dlrelease(int rid) ───────────────────────────────────────────────────────
+// system call: release a token that this process holds
 uint64
 sys_dlrelease(void)
 {
-  int rid;
-  argint(0, &rid);
-  if(rid < 0 || rid >= DL_TOKEN_MAX) return -1;
+  int token_id;
+  int i, j;
+  struct proc *p;
 
-  struct proc *p = myproc();
-  if(!dl_lock_acquire()) return -1;
+  argint(0, &token_id);
+  if(token_id < 0 || token_id >= DL_TOKEN_MAX)
+    return -1;
 
-  if(dl_resources[rid].holder_pid != p->pid){
+  p = myproc();
+
+  if(!dl_lock_acquire())
+    return -1;
+
+  // make sure we actually hold this token
+  if(dl_resources[token_id].holder_pid != p->pid){
     dl_lock_release();
     return -1;
   }
 
-  for(int i = 0; i < p->holds_count; i++){
-    if(p->holds[i] != rid) continue;
-    for(int j = i; j < p->holds_count-1; j++)
+  // remove token from our holds array by shifting everything left
+  for(i = 0; i < p->holds_count; i++){
+    if(p->holds[i] != token_id)
+      continue;
+    for(j = i; j < p->holds_count - 1; j++)
       p->holds[j] = p->holds[j+1];
     p->holds_count--;
     p->holds[p->holds_count] = -1;
     break;
   }
-  dl_resources[rid].holder_pid = -1;
-  wakeup(&dl_resources[rid]);
+
+  dl_resources[token_id].holder_pid = -1;
+
+  // wake up anyone who was waiting for this token
+  wakeup(&dl_resources[token_id]);
 
   dl_lock_release();
   return 0;
 }
 
-// ── dlsetmode(int mode) ──────────────────────────────────────────────────────
+// system call: switch between normal and aggressive mode
+// 0 = normal, 1 = aggressive
 uint64
 sys_dlsetmode(void)
 {
-  int mode;
-  argint(0, &mode);
-  if(mode != DL_MODE_NORMAL && mode != DL_MODE_AGGRESSIVE) return -1;
-  dl_mode = mode;
-  printf("Deadlock mode: %s\n",
-         mode == DL_MODE_AGGRESSIVE ? "AGGRESSIVE" : "NORMAL");
+  int new_mode;
+  argint(0, &new_mode);
+
+  if(new_mode != DL_MODE_NORMAL && new_mode != DL_MODE_AGGRESSIVE)
+    return -1;
+
+  dl_mode = new_mode;
+  printf("Deadlock mode set to: %s\n",
+    new_mode == DL_MODE_AGGRESSIVE ? "AGGRESSIVE" : "NORMAL");
   return 0;
 }
 
-// ── dlsetresolution(int res) ─────────────────────────────────────────────────
+// system call: switch between kill and preempt resolution
+// 0 = kill the victim, 1 = strip resources and keep it alive
 uint64
 sys_dlsetresolution(void)
 {
-  int res;
-  argint(0, &res);
-  if(res != DL_RES_KILL && res != DL_RES_PREEMPT) return -1;
-  dl_resolution = res;
-  printf("Deadlock resolution: %s\n",
-         res == DL_RES_KILL ? "KILL" : "PREEMPT");
+  int new_res;
+  argint(0, &new_res);
+
+  if(new_res != DL_RES_KILL && new_res != DL_RES_PREEMPT)
+    return -1;
+
+  dl_resolution = new_res;
+  printf("Deadlock resolution set to: %s\n",
+    new_res == DL_RES_KILL ? "KILL" : "PREEMPT");
   return 0;
 }
 
-// ── setpriority(int prio) ────────────────────────────────────────────────────
+// system call: set the priority of the calling process
+// 0 is lowest priority (killed first), 9 is highest (protected)
 uint64
 sys_setpriority(void)
 {
   int prio;
   argint(0, &prio);
-  if(prio < 0 || prio > 9) return -1;
+
+  if(prio < 0 || prio > 9)
+    return -1;
+
   myproc()->priority = prio;
   return 0;
 }

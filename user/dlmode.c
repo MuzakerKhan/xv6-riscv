@@ -2,65 +2,87 @@
 #include "kernel/stat.h"
 #include "user/user.h"
 
-// dlmode -- switch deadlock subsystem modes from the xv6 shell.
+// dlmode: command to control the deadlock system settings
 //
-// Usage:
-//   dlmode normal          -- record-only for kernel locks (safe, low overhead)
-//   dlmode aggressive      -- full deadlock management on every resource access
-//   dlmode kill            -- resolution: terminate the victim
-//   dlmode preempt         -- resolution: strip victim's resources, keep it alive
-//   dlmode prio <0-9>      -- set this process's deadlock priority
-//   dlmode status          -- print current mode (same as dlmon but one-shot)
+// usage:
+//   dlmode normal        switch to normal mode (less overhead)
+//   dlmode aggressive    switch to aggressive mode (checks everything)
+//   dlmode kill          set resolution to kill the victim
+//   dlmode preempt       set resolution to strip resources, keep process alive
+//   dlmode prio <0-9>    set this process priority for scoring
+//   dlmode status        print current system state
 
-static void
-usage(void)
+// simple string comparison since we cant use strcmp in some environments
+static int str_equal(const char *a, const char *b)
 {
-  printf("Usage:\n");
-  printf("  dlmode normal|aggressive      -- set detection mode\n");
-  printf("  dlmode kill|preempt           -- set resolution mode\n");
-  printf("  dlmode prio <0-9>             -- set this process priority (0=low,9=high)\n");
-  printf("  dlmode status                 -- print system state\n");
+    while(*a && *b && *a == *b)
+    {
+        a++;
+        b++;
+    }
+    return (*a == 0 && *b == 0);
 }
 
-static int
-streq(const char *a, const char *b)
+static void print_usage(void)
 {
-  while(*a && *b && *a == *b){ a++; b++; }
-  return *a == 0 && *b == 0;
+    printf("usage:\n");
+    printf("  dlmode normal        - low overhead recording mode\n");
+    printf("  dlmode aggressive    - full deadlock checking on every access\n");
+    printf("  dlmode kill          - kill the victim when deadlock found\n");
+    printf("  dlmode preempt       - strip victim resources, keep process alive\n");
+    printf("  dlmode prio <0-9>    - set this process priority (0=low, 9=high)\n");
+    printf("  dlmode status        - show current deadlock system state\n");
 }
 
-int
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
-  if(argc < 2){ usage(); exit(1); }
+    int prio_val;
 
-  if(streq(argv[1], "normal")){
-    dlsetmode(0);
+    if(argc < 2)
+    {
+        print_usage();
+        exit(1);
+    }
 
-  } else if(streq(argv[1], "aggressive")){
-    dlsetmode(1);
-
-  } else if(streq(argv[1], "kill")){
-    dlsetresolution(0);
-
-  } else if(streq(argv[1], "preempt")){
-    dlsetresolution(1);
-
-  } else if(streq(argv[1], "prio")){
-    if(argc < 3){ printf("dlmode prio needs a value 0-9\n"); exit(1); }
-    int p = atoi(argv[2]);
-    if(setpriority(p) < 0)
-      printf("Invalid priority (use 0-9)\n");
+    if(str_equal(argv[1], "normal"))
+    {
+        dlsetmode(0);
+    }
+    else if(str_equal(argv[1], "aggressive"))
+    {
+        dlsetmode(1);
+    }
+    else if(str_equal(argv[1], "kill"))
+    {
+        dlsetresolution(0);
+    }
+    else if(str_equal(argv[1], "preempt"))
+    {
+        dlsetresolution(1);
+    }
+    else if(str_equal(argv[1], "prio"))
+    {
+        if(argc < 3)
+        {
+            printf("dlmode prio needs a number from 0 to 9\n");
+            exit(1);
+        }
+        prio_val = atoi(argv[2]);
+        if(setpriority(prio_val) < 0)
+            printf("invalid priority, use 0 to 9\n");
+        else
+            printf("priority set to %d\n", prio_val);
+    }
+    else if(str_equal(argv[1], "status"))
+    {
+        dlstate();
+    }
     else
-      printf("Priority set to %d\n", p);
+    {
+        printf("unknown option: %s\n", argv[1]);
+        print_usage();
+        exit(1);
+    }
 
-  } else if(streq(argv[1], "status")){
-    dlstate();
-
-  } else {
-    usage();
-    exit(1);
-  }
-
-  exit(0);
+    exit(0);
 }

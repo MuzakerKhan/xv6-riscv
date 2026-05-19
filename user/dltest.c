@@ -2,78 +2,104 @@
 #include "kernel/stat.h"
 #include "user/user.h"
 
-// dltest -- create a real circular-wait deadlock between two processes.
-//
-// Process A: grabs token 0, then tries token 1.
-// Process B: grabs token 1, then tries token 0.
-// The kernel detects the cycle and resolves it according to the current mode.
-//
-// Run "dlmode aggressive" first for immediate detection on every block.
-// Run "dlmon" in a second QEMU window to watch the live graph.
+// dltest: basic two process deadlock
+// process A grabs token 0 then wants token 1
+// process B grabs token 1 then wants token 0
+// this creates a circular wait and the system should detect and fix it
 
-int
-main(void)
+int main(void)
 {
-  printf("=== dltest: two-process circular-wait deadlock ===\n");
-  printf("A holds token0, wants token1.\n");
-  printf("B holds token1, wants token0.\n\n");
+    int child_pid;
+    int ret;
 
-  int pid = fork();
-  if(pid < 0){ printf("fork failed\n"); exit(1); }
+    printf("=== dltest: basic two process deadlock ===\n");
+    printf("process A holds token0 and wants token1\n");
+    printf("process B holds token1 and wants token0\n\n");
 
-  if(pid == 0){
-    // ── CHILD: Process B ──────────────────────────────────────────────
-    printf("B (pid=%d): acquiring token 1...\n", getpid());
-    if(dlacquire(1) < 0){
-      printf("B: failed to acquire token 1 (victim?)\n");
-      exit(1);
+    child_pid = fork();
+
+    if(child_pid < 0)
+    {
+        printf("fork failed\n");
+        exit(1);
     }
-    printf("B (pid=%d): got token 1. Yielding...\n", getpid());
-    pause(5);   // let A also get token 0
 
-    printf("B (pid=%d): trying token 0 — deadlock forms here\n", getpid());
-    int r = dlacquire(0);
-    if(r == -2){
-      printf("B (pid=%d): killed by resolver.\n", getpid());
-      dlrelease(1);
-      exit(1);
-    } else if(r == -3){
-      printf("B (pid=%d): preempted (resources stripped). Retrying later.\n", getpid());
-      dlrelease(1);
-      exit(0);
+    if(child_pid == 0)
+    {
+        // this is process B (child)
+        printf("process B (pid=%d): trying to get token 1...\n", getpid());
+
+        ret = dlacquire(1);
+        if(ret < 0)
+        {
+            printf("process B: could not get token 1\n");
+            exit(1);
+        }
+
+        printf("process B (pid=%d): got token 1, waiting a bit...\n", getpid());
+        pause(5);
+
+        printf("process B (pid=%d): now trying token 0 (deadlock will happen here)\n", getpid());
+
+        ret = dlacquire(0);
+        if(ret == -2)
+        {
+            printf("process B (pid=%d): was killed by the resolver\n", getpid());
+            dlrelease(1);
+            exit(1);
+        }
+        else if(ret == -3)
+        {
+            printf("process B (pid=%d): resources were taken (preempt mode)\n", getpid());
+            dlrelease(1);
+            exit(0);
+        }
+
+        printf("process B (pid=%d): got token 0, releasing everything\n", getpid());
+        dlrelease(0);
+        dlrelease(1);
+        exit(0);
     }
-    printf("B (pid=%d): got token 0. Releasing.\n", getpid());
-    dlrelease(0);
-    dlrelease(1);
+    else
+    {
+        // this is process A (parent)
+        printf("process A (pid=%d): trying to get token 0...\n", getpid());
+
+        ret = dlacquire(0);
+        if(ret < 0)
+        {
+            printf("process A: could not get token 0\n");
+            wait(0);
+            exit(1);
+        }
+
+        printf("process A (pid=%d): got token 0, waiting a bit...\n", getpid());
+        pause(5);
+
+        printf("process A (pid=%d): now trying token 1 (deadlock will happen here)\n", getpid());
+
+        ret = dlacquire(1);
+        if(ret == -2)
+        {
+            printf("process A (pid=%d): was killed by the resolver\n", getpid());
+            dlrelease(0);
+            wait(0);
+            exit(1);
+        }
+        else if(ret == -3)
+        {
+            printf("process A (pid=%d): resources were taken (preempt mode)\n", getpid());
+            dlrelease(0);
+            wait(0);
+            exit(0);
+        }
+
+        printf("process A (pid=%d): got token 1, releasing everything\n", getpid());
+        dlrelease(1);
+        dlrelease(0);
+        wait(0);
+        printf("=== dltest done ===\n");
+    }
+
     exit(0);
-
-  } else {
-    // ── PARENT: Process A ─────────────────────────────────────────────
-    printf("A (pid=%d): acquiring token 0...\n", getpid());
-    if(dlacquire(0) < 0){
-      printf("A: failed to acquire token 0 (victim?)\n");
-      wait(0); exit(1);
-    }
-    printf("A (pid=%d): got token 0. Yielding...\n", getpid());
-    pause(5);
-
-    printf("A (pid=%d): trying token 1 — deadlock forms here\n", getpid());
-    int r = dlacquire(1);
-    if(r == -2){
-      printf("A (pid=%d): killed by resolver.\n", getpid());
-      dlrelease(0);
-      wait(0); exit(1);
-    } else if(r == -3){
-      printf("A (pid=%d): preempted. Retrying later.\n", getpid());
-      dlrelease(0);
-      wait(0); exit(0);
-    }
-    printf("A (pid=%d): got token 1. Releasing.\n", getpid());
-    dlrelease(1);
-    dlrelease(0);
-    wait(0);
-    printf("=== dltest done ===\n");
-  }
-
-  exit(0);
 }
