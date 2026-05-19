@@ -146,14 +146,15 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
-  // Initialize deadlock tracking fields.
+  // initialize the deadlock tracking fields we added to struct proc
+  // every new process starts holding nothing and waiting for nothing
   p->holds_count  = 0;
-  p->waiting_for  = -1;
+  p->waiting_for  = -1;  // -1 means not waiting for any resource
   p->dl_preempted = 0;
-  p->priority     = 5;      // medium priority by default
+  p->priority     = 5;   // 5 is medium priority by default, can be changed with setpriority()
   p->cpu_ticks    = 0;
   for(int i = 0; i < 16; i++)
-    p->holds[i] = -1;
+    p->holds[i] = -1;    // -1 means empty slot in holds array
 
   return p;
 }
@@ -171,7 +172,8 @@ freeproc(struct proc *p)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
   p->sz = 0;
-  // Release any deadlock resources this process held.
+  // before fully freeing this process, release any deadlock resources it still held
+  // this handles the case where a process dies without calling dlrelease properly
   extern void dl_proc_cleanup(int);
   if(p->pid > 0)
     dl_proc_cleanup(p->pid);

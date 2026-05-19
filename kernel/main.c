@@ -14,7 +14,7 @@ main()
   if(cpuid() == 0){
     consoleinit();
     printfinit();
-    deadlock_init(); // deadlock subsystem — early so kernel locks get registered
+    deadlock_init(); // start the deadlock system early so sleeplocks created during boot get registered
     printf("\n");
     printf("xv6 kernel is booting\n");
     printf("\n");

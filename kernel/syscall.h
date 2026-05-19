@@ -19,10 +19,11 @@
 #define SYS_unlink 18
 #define SYS_link   19
 #define SYS_mkdir  20
-#define SYS_close         21
-#define SYS_dlstate       22
-#define SYS_dlacquire     23
-#define SYS_dlrelease     24
-#define SYS_dlsetmode     25
-#define SYS_dlsetresolution 26
-#define SYS_setpriority   27
+#define SYS_close           21
+// system calls added for the deadlock detection project
+#define SYS_dlstate         22  // print deadlock system state
+#define SYS_dlacquire       23  // grab a user token, blocks if taken
+#define SYS_dlrelease       24  // release a user token
+#define SYS_dlsetmode       25  // switch between normal and aggressive mode
+#define SYS_dlsetresolution 26  // switch between kill and preempt mode
+#define SYS_setpriority     27  // set this process kill priority (0 to 9)

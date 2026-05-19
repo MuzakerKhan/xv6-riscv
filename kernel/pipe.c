@@ -17,7 +17,7 @@ struct pipe {
   uint nwrite;    // number of bytes written
   int readopen;   // read fd is still open
   int writeopen;  // write fd is still open
-  int dl_rid;     // deadlock subsystem resource ID (-1 = not tracked)
+  int dl_rid;     // id in the deadlock resource table, assigned when pipealloc runs, -1 if not tracked
 };
 
 int
@@ -35,13 +35,14 @@ pipealloc(struct file **f0, struct file **f1)
   pi->writeopen = 1;
   pi->nwrite = 0;
   pi->nread = 0;
-  pi->dl_rid = -1;
+  pi->dl_rid = -1; // start unregistered
   initlock(&pi->lock, "pipe");
 
+  // register this pipe in the deadlock resource table so we can track who is blocked on it
   extern int dl_ready;
   extern int dl_register(char*, int);
   if(dl_ready)
-    pi->dl_rid = dl_register("pipe", 3 /* DL_TYPE_PIPE */);
+    pi->dl_rid = dl_register("pipe", 3); // 3 = DL_TYPE_PIPE
   (*f0)->type = FD_PIPE;
   (*f0)->readable = 1;
   (*f0)->writable = 0;
@@ -95,11 +96,13 @@ pipewrite(struct pipe *pi, uint64 addr, int n)
     if(pi->nwrite == pi->nread + PIPESIZE){ //DOC: pipewrite-full
       wakeup(&pi->nread);
       // Record that this process is blocked waiting for the pipe to drain.
+      // tell deadlock system we are about to block waiting for pipe to drain
       if(pi->dl_rid >= 0 && pr->pid > 0){
         extern void dl_on_wait(int, int);
         dl_on_wait(pi->dl_rid, pr->pid);
       }
       sleep(&pi->nwrite, &pi->lock);
+      // woke up, we are no longer waiting
       if(pi->dl_rid >= 0 && pr->pid > 0){
         extern void dl_on_unwait(int);
         dl_on_unwait(pr->pid);
@@ -131,12 +134,13 @@ piperead(struct pipe *pi, uint64 addr, int n)
       release(&pi->lock);
       return -1;
     }
-    // Record blocking on empty pipe.
+    // tell deadlock system we are about to block waiting for pipe to have data
     if(pi->dl_rid >= 0 && pr->pid > 0){
       extern void dl_on_wait(int, int);
       dl_on_wait(pi->dl_rid, pr->pid);
     }
     sleep(&pi->nread, &pi->lock); //DOC: piperead-sleep
+    // woke up, no longer waiting
     if(pi->dl_rid >= 0 && pr->pid > 0){
       extern void dl_on_unwait(int);
       dl_on_unwait(pr->pid);

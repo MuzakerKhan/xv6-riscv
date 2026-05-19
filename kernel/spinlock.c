@@ -14,7 +14,8 @@ initlock(struct spinlock *lk, char *name)
   lk->name        = name;
   lk->locked      = 0;
   lk->cpu         = 0;
-  lk->resource_id = -1;   // not tracked — spinlocks don't cause inter-process deadlock
+  lk->resource_id = -1;   // spinlocks are not tracked in our deadlock system
+                          // reason: processes spin on these, they never sleep, so circular wait cant happen
 }
 
 // Acquire the lock.

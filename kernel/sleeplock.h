@@ -7,6 +7,6 @@ struct sleeplock {
   char *name;         // Name of lock.
   int  pid;           // Process holding lock
 
-  int  dl_rid;        // deadlock subsystem resource ID (-1 = exempt)
+  int  dl_rid;        // id assigned by the deadlock system when this sleeplock was created, -1 if not registered
 };
 

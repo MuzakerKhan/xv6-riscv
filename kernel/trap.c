@@ -169,7 +169,9 @@ clockintr()
     ticks++;
     wakeup(&ticks);
 
-    // Set periodic deadlock-check flag every DL_CHECK_TICKS ticks.
+    // every 100 ticks (about 1 second) set the flag so the deadlock system runs a check
+    // the actual check happens in dl_maybe_check() which is called from user syscalls
+    // we dont run it here directly because we are in interrupt context and cant sleep
     extern volatile int dl_check_pending;
     if(ticks % 100 == 0)
       dl_check_pending = 1;
@@ -177,7 +179,8 @@ clockintr()
     release(&tickslock);
   }
 
-  // Increment cpu_ticks for the currently running process.
+  // count how many ticks this process has been running
+  // used in the kill scoring formula: more ticks = more progress = more expensive to kill
   struct proc *p = myproc();
   if(p && p->state == RUNNING)
     p->cpu_ticks++;

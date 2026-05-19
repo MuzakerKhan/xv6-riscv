@@ -105,11 +105,11 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
 
-  // Deadlock subsystem tracking.
-  int      holds[16];     // resource IDs currently held (tokens + kernel locks)
-  int      holds_count;   // number of entries in holds[]
-  int      waiting_for;   // resource ID this process is blocked on (-1 = none)
-  int      dl_preempted;  // 1 if resolver stripped our resources (preempt mode)
-  int      priority;      // deadlock scoring priority 0(low)..9(high); default 5
-  uint64   cpu_ticks;     // accumulated timer ticks while running (for progress score)
+  // fields added for deadlock detection system
+  int      holds[16];     // list of resource ids this process currently holds, max 16
+  int      holds_count;   // how many resources it holds right now
+  int      waiting_for;   // which resource id it is blocked on, -1 means not waiting for anything
+  int      dl_preempted;  // set to 1 by resolver when it strips our resources in preempt mode
+  int      priority;      // kill scoring priority, 0 is lowest (killed first), 9 is highest (protected), default is 5
+  uint64   cpu_ticks;     // counts how many timer ticks this process has been running, used to measure progress
 };

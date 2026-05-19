@@ -6,6 +6,6 @@ struct spinlock {
   char *name;        // Name of lock.
   struct cpu *cpu;   // The cpu holding the lock.
 
-  int resource_id;   // deadlock subsystem ID (-1 = exempt / not tracked)
+  int resource_id;   // id in the deadlock resource table, always -1 for spinlocks (not tracked)
 };
 
