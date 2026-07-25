@@ -1,3 +1,15 @@
+THIS FORK
+
+This is a fork of MIT's xv6-riscv teaching operating system
+(https://github.com/mit-pdos/xv6-riscv), extended with a deadlock
+detection, prevention, and resolution subsystem for an Operating
+Systems course project (Air University, Islamabad). Additions include
+resource allocation graph / wait-for graph tracking, DFS-based cycle
+detection, a Banker's algorithm implementation, new syscalls, and test
+programs — layered on top of the unmodified xv6 kernel base. See
+PROJECT_REPORT.md for the full writeup. All credit for the base
+operating system belongs to the original xv6 authors below.
+
 xv6 is a re-implementation of Dennis Ritchie's and Ken Thompson's Unix
 Version 6 (v6).  xv6 loosely follows the structure and style of v6,
 but is implemented for a modern RISC-V multiprocessor using ANSI C.
