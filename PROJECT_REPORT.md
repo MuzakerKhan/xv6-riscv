@@ -2,13 +2,7 @@
 ## Modification of xv6-RISC-V Operating System Kernel
 ### Operating Systems Project Report
 
-**Group Members:**
-- Muzaker Khan (242361-BSCYSev-F-24-B)
-
-**Institution:** Air University, Islamabad
-**Subject:** Operating Systems
-**Submitted To:** (Sir's Name)
-**Date:** 2026
+**Author:** Muzaker Khan
 
 ---
 
